@@ -36,19 +36,16 @@
  */
 
 /// WiFi network SSID (network name)
-static char* WIFI_SSID = "YOUR_SSID";
+static char WIFI_SSID[] = "YOUR_SSID";
 
 /// WiFi network password (WPA/WPA2)
-static char* WIFI_PASSWORD = "YOUR_PASSWORD";
+static char WIFI_PASSWORD[] = "YOUR_PASSWORD";
 
 /// IP address of the micro-ROS agent
 static IPAddress AGENT_IP(192, 168, 0, 0);
 
 /// TCP port number for micro-ROS agent communication
-static uint16_t AGENT_PORT = 8888;
-
-/// ROS 2 Domain ID for network isolation (0-232)
-static constexpr uint32_t ROS_DOMAIN_ID = 0;
+static size_t AGENT_PORT = 9999;
 
 /** @} */
 
