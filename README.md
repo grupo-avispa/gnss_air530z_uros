@@ -2,19 +2,24 @@
 ![ROS2](https://img.shields.io/badge/ros2-jazzy-blue?logo=ros&logoColor=white)
 ![License](https://img.shields.io/github/license/grupo-avispa/gnss_air530z_uros)
 
-Professional-grade firmware for ESP32 with support for [micro-ROS](https://micro.ros.org/) and the multi-mode **Grove GPS Air530** module. Integrates FreeRTOS for concurrent multitasking and is built with [PlatformIO](https://platformio.org/). Ideal for distributed GNSS positioning applications in robotic systems.
 
-## Features
+## Overview
 
-- **micro-ROS Integration**: Full ROS 2 publisher/subscriber capabilities over WiFi
-- **Multi-Mode Positioning**: Support for GPS, Beidou, GLONASS, Galileo, QZSS, and SBAS
-- **FreeRTOS Multitasking**: Concurrent task execution with priority-based scheduling
-- **Time Synchronization**: Automatic clock synchronization with ROS agent
-- **Communication Layer**: Modular abstraction for GPS serial communication
+Firmware for ESP32 using [micro-ROS](https://micro.ros.org/) and the **Grove GPS Air530** module. Integrates FreeRTOS for concurrent multitasking and is built with [PlatformIO](https://platformio.org/). Ideal for distributed GNSS positioning applications in robotic systems.
 
-## Dependencies
+**Keywords:** ROS2, gnss, positioning, micro-ROS, ESP32, FreeRTOS, PlatformIO
+
+**Author: Alberto Tudela<br />**
+
+This is research code, expect that it changes often and any fitness for a particular purpose is disclaimed.
+
+## Installation
+
+### Building from Source
+
+#### Dependencies
 - [PlatformIO](https://docs.platformio.org/) (Cross-platform build system),
-- [Robot Operating System (ROS) 2](https://docs.ros.org/en/jazzy/) (robotics middleware),
+- [Robot Operating System (ROS) 2](https://docs.ros.org/en/jazzy/) (middleware for robotics),
 - [micro-ROS](https://micro.ros.org/) (ROS 2 client library for microcontrollers),
 
 ## Hardware
@@ -108,3 +113,68 @@ Micro-ROS task created...
 [TIMER] Sync timer callback called
 Synchronized timestamp with PC agent
 ```
+
+## Running the micro-ROS Agent with Docker Compose
+
+A `docker-compose.yml` is provided to easily launch the micro-ROS agent in a containerized environment. Two agent modes are available:
+
+### Available Agent Modes
+
+1. **Serial Agent**: Direct communication via UART/USB (stable, no network needed)
+   - Best for: Development, debugging, stable environments
+   - Connection: `/dev/ttyUSB0` (or your serial port)
+
+2. **UDP Agent**: Network-based communication over WiFi/Ethernet (flexible, scalable)
+   - Best for: Wireless systems, distributed architectures
+   - Connection: `localhost:9999` (default)
+
+### Prerequisites
+- Docker and Docker Compose installed
+- ESP32 device connected to your host machine
+
+### Launch the Agent
+
+**Serial Mode (recommended for testing):**
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.serial.yml up
+```
+
+**UDP Mode (WiFi/Network):**
+```bash
+docker-compose up
+```
+
+Or explicitly specify UDP mode:
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.udp.yml up
+```
+
+### Configuration
+
+Update the firmware to match your chosen agent mode:
+
+**For Serial Connection** - In `include/config_transport.hpp`:
+```cpp
+set_microros_serial_transports(Serial);
+```
+
+**For UDP/WiFi Connection** - In `include/config_transport.hpp`:
+```cpp
+set_microros_wifi_transports(WIFI_SSID, WIFI_PASSWORD, AGENT_IP, AGENT_PORT);
+```
+
+### Stop the Agent
+
+```bash
+docker-compose down
+```
+
+### View Logs
+
+```bash
+docker-compose logs -f
+```
+
+### Verify Connection
+
+After launching the agent and uploading the firmware to ESP32, you should see synchronization messages in both the device output and agent logs.
