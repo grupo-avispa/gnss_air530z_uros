@@ -1,25 +1,48 @@
-# ESP32 micro-ROS template using PlatformIO
+# gnss_air530z_uros
 ![ROS2](https://img.shields.io/badge/ros2-jazzy-blue?logo=ros&logoColor=white)
-![License](https://img.shields.io/github/license/grupo-avispa/micro-ros-esp32-template)
+![License](https://img.shields.io/github/license/grupo-avispa/gnss_air530z_uros)
 
-A professional-grade firmware template for ESP32 microcontrollers running [micro-ROS](https://micro.ros.org/) with FreeRTOS multitasking support. Built with [PlatformIO](https://platformio.org/), this template provides a solid foundation for building distributed robotics systems with ROS 2 integration.
+Professional-grade firmware for ESP32 with support for [micro-ROS](https://micro.ros.org/) and the multi-mode **Grove GPS Air530** module. Integrates FreeRTOS for concurrent multitasking and is built with [PlatformIO](https://platformio.org/). Ideal for distributed GNSS positioning applications in robotic systems.
 
 ## Features
 
 - **micro-ROS Integration**: Full ROS 2 publisher/subscriber capabilities over WiFi
+- **Multi-Mode Positioning**: Support for GPS, Beidou, GLONASS, Galileo, QZSS, and SBAS
 - **FreeRTOS Multitasking**: Concurrent task execution with priority-based scheduling
 - **Time Synchronization**: Automatic clock synchronization with ROS agent
-- **Hardware Abstraction**: Modular serial communication layer
+- **Communication Layer**: Modular abstraction for GPS serial communication
 
 ## Dependencies
 - [PlatformIO](https://docs.platformio.org/) (Cross-platform build system),
-- [Robot Operating System (ROS) 2](https://docs.ros.org/en/jazzy/) (middleware for robotics),
+- [Robot Operating System (ROS) 2](https://docs.ros.org/en/jazzy/) (robotics middleware),
 - [micro-ROS](https://micro.ros.org/) (ROS 2 client library for microcontrollers),
 
+## Hardware
+
+### Grove GPS Air530
+High-performance multi-mode GNSS module for precise positioning:
+
+| Specification            | Value                                     |
+| ------------------------ | ----------------------------------------- |
+| **Power Supply Voltage** | 3.3V/5V                                   |
+| **Operating Current**    | Up to 60mA                                |
+| **Warm Start Time**      | 4s                                        |
+| **Cold Start Time**      | 30s                                       |
+| **Baudrate**             | 9600 bps                                  |
+| **Protocol**             | NMEA                                      |
+| **Positioning Modes**    | GPS, Beidou, GLONASS, Galileo, QZSS, SBAS |
+
+**Physical Connection:**
+- Red: 5V (or 3.3V)
+- Black: GND
+- Yellow: RX (GPIO)
+- White: TX (GPIO)
+
+Refer to the [GPS Air530 documentation](https://wiki.seeedstudio.com/Grove-GPS-Air530/) for more details.
 
 ## Configuration
 
-### WiFi and Network Settings
+### WiFi and Transport Configuration
 
 Edit `include/config_transport.hpp` to set your network parameters:
 

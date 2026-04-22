@@ -64,12 +64,14 @@ constexpr uint8_t TXD2 = 255;  ///< UART2 Transmit pin (disabled with 255)
 // Time Synchronization Variables
 /// Timeout for ROS agent sync session in milliseconds
 const int SYNC_TIMEOUT_MS = 2000;
-/// Synchronized system time in milliseconds from agent
-int64_t ros_synced_time_ms = 0;
 /// Synchronized system time in nanoseconds from agent
 int64_t ros_synced_time_ns = 0;
-/// Local time (milliseconds) at last synchronization point
-long ms_before_sync = 0;
+/// Local time (microseconds) at last synchronization point
+uint64_t micros_before_sync = 0;
+/// Mutex to protect time synchronization variables
+portMUX_TYPE timeSyncMutex = portMUX_INITIALIZER_UNLOCKED;
+/// Flag to indicate if time has been synchronized with agent
+volatile bool time_synchronized = false;
 
 /**
  * @brief Task for reading GNSS data from serial communication.
@@ -211,15 +213,33 @@ void SerialGNSSReadTask(void* pvParameters) {
 
 void NavSatPublishTask(void* pvParameters) {
   while (true) {
-    // Calculate seconds and nanoseconds from epoch nanoseconds
-    msg.header.stamp.sec = ros_synced_time_ns / 1000000000;
-    msg.header.stamp.nanosec = ros_synced_time_ns % 1000000000;
+    // Only publish if time has been synchronized with ROS agent
+    if (!time_synchronized) {
+      Serial.println("Waiting for time synchronization...");
+      vTaskDelay(1000);
+      continue;
+    }
+
+    // Acquire mutex to safely read synchronized time
+    portENTER_CRITICAL(&timeSyncMutex);
+    int64_t synced_time_ns = ros_synced_time_ns;
+    uint64_t sync_micros = micros_before_sync;
+    portEXIT_CRITICAL(&timeSyncMutex);
+
+    // Calculate current time: synced_time + elapsed microseconds converted to nanoseconds
+    uint64_t elapsed_micros = micros() - sync_micros;
+    int64_t current_time_ns = synced_time_ns + (elapsed_micros * 1000);
+
+    // Convert nanoseconds to seconds and nanoseconds
+    msg.header.stamp.sec = current_time_ns / 1000000000LL;
+    msg.header.stamp.nanosec = current_time_ns % 1000000000LL;
     msg.header.frame_id.data = const_cast<char*>(ROS_FRAME_ID);
     msg.header.frame_id.size = strlen(ROS_FRAME_ID);
     msg.latitude = 37.7749;   // Example latitude (San Francisco)
     msg.longitude = -122.4194; // Example longitude (San Francisco)
     msg.altitude = 30.0;     // Example altitude in meters
-    Serial.printf("Publishing NavSatFix: lat=%.4f, lon=%.4f, alt=%.1f\n", msg.latitude, msg.longitude, msg.altitude);
+    Serial.printf("Publishing NavSatFix: lat=%.4f, lon=%.4f, alt=%.1f, time=%ld.%09lu\n", 
+                  msg.latitude, msg.longitude, msg.altitude, msg.header.stamp.sec, msg.header.stamp.nanosec);
     
     rcl_ret_t ret = rcl_publish(&navsat_publisher, &msg, NULL);
     if (ret != RCL_RET_OK) {
@@ -241,12 +261,21 @@ void sync_timer_callback(rcl_timer_t* timer, int64_t last_call_time) {
   rmw_uros_sync_session(SYNC_TIMEOUT_MS);
 
   if (rmw_uros_epoch_synchronized()) {
-    // Get time in milliseconds and nanoseconds
-    ros_synced_time_ms = rmw_uros_epoch_millis();
-    ros_synced_time_ns = rmw_uros_epoch_nanos();
-    ms_before_sync = millis();
-    Serial.println("Synchronized timestamp with PC agent");
+    // Get synchronized time in nanoseconds
+    int64_t synced_time_ns = rmw_uros_epoch_nanos();
+    
+    // Acquire mutex to safely update synchronized time
+    portENTER_CRITICAL(&timeSyncMutex);
+    ros_synced_time_ns = synced_time_ns;
+    micros_before_sync = micros();
+    time_synchronized = true;
+    portEXIT_CRITICAL(&timeSyncMutex);
+    
+    Serial.printf("Synchronized timestamp with PC agent: %lld ns\n", synced_time_ns);
   } else {
     Serial.println("Error in sync_timer_callback: time not synchronized");
+    portENTER_CRITICAL(&timeSyncMutex);
+    time_synchronized = false;
+    portEXIT_CRITICAL(&timeSyncMutex);
   }
 }
