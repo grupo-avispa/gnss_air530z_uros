@@ -30,7 +30,7 @@
 
 // Local configuration
 #include "config_ros.hpp"
-#include "config_transport.hpp"  // TODO: Update with transport settings
+#include "config_transport.hpp"
 #include "macros.hpp"
 
 // micro-ROS Libraries
@@ -59,7 +59,7 @@ TaskHandle_t serialGNSSTaskHandle;   ///< Handle for serial read task
 TaskHandle_t navSatPublishTaskHandle; ///< Handle for NavSatFix publish task
 TaskHandle_t rosTaskHandle;      ///< Handle for ROS executor task
 
-// Hardware Configuration (TODO: Update for your specific hardware)
+// Hardware Configuration
 constexpr uint8_t RXD2 = 16;   ///< UART2 Receive pin
 constexpr uint8_t TXD2 = 17;  ///< UART2 Transmit pin (disabled with 255)
 
@@ -75,9 +75,11 @@ portMUX_TYPE timeSyncMutex = portMUX_INITIALIZER_UNLOCKED;
 /// Flag to indicate if time has been synchronized with agent
 volatile bool time_synchronized = false;
 
+// Mutexes for shared data access
 portMUX_TYPE gpsMutex = portMUX_INITIALIZER_UNLOCKED;
 portMUX_TYPE msgMutex = portMUX_INITIALIZER_UNLOCKED;
 
+// Structure to hold GPS data read from serial communication
 struct GpsData {
     double lat;
     double lon;
@@ -87,7 +89,7 @@ struct GpsData {
 };
 
 TinyGPSPlus gps;
-GpsData gps_coords;
+GpsData gps_data;
 
 /**
  * @brief Task for reading GNSS data from serial communication.
@@ -134,8 +136,8 @@ void setup() {
   // Configure micro-ROS WiFi transport to connect to ROS agent
   // Uncomment and update the following line with your transport settings
   // (e.g., WiFi credentials, agent IP/port)
-  set_microros_wifi_transports(WIFI_SSID, WIFI_PASSWORD, AGENT_IP, AGENT_PORT);
-  //set_microros_serial_transports(Serial);
+  //set_microros_wifi_transports(WIFI_SSID, WIFI_PASSWORD, AGENT_IP, AGENT_PORT);
+  set_microros_serial_transports(Serial);
   Serial.println("micro-ROS configuration set...");
 
   allocator = rcl_get_default_allocator();
@@ -170,9 +172,7 @@ void setup() {
 
   // Create FreeRTOS queue for communication between tasks
   // Adjust queue size and item size according to your needs
-  
   data_queue = xQueueCreate(1, sizeof(GpsData));
-  
 
   // Create task for reading GNSS serial data (core 0, priority 1)
   xTaskCreatePinnedToCore(
@@ -215,44 +215,40 @@ void vTaskMicroROS(void* pvParameters) {
 void SerialGNSSReadTask(void* pvParameters) {
   while (true) {
     while (Serial2.available() > 0) {
-      if (gps.encode(Serial2.read())) {    
+      if (gps.encode(Serial2.read())) {
           portENTER_CRITICAL(&gpsMutex);
-          gps_coords.lat = gps.location.lat();
-          gps_coords.lon = gps.location.lng();
-          gps_coords.alt = gps.altitude.isValid() ? gps.altitude.meters() : 0.0;
-          gps_coords.service = static_cast<u_int8_t>(gps.getCurrentSentenceSystem());
+          gps_data.lat = gps.location.lat();
+          gps_data.lon = gps.location.lng();
+          gps_data.alt = gps.altitude.isValid() ? gps.altitude.meters() : 0.0;
+          gps_data.service = static_cast<u_int8_t>(gps.getCurrentSentenceSystem());
           portEXIT_CRITICAL(&gpsMutex);
-          //Serial.printf("Publishing NavSatFix: lat=%.4f, lon=%.4f, alt=%.1f, service=%u\n", 
-              //gps_coords.lat, gps_coords.lon, gps_coords.alt, gps_coords.service);
-          xQueueOverwrite(data_queue, &gps_coords);
+          xQueueOverwrite(data_queue, &gps_data);
       }
     }
-
     vTaskDelay(10);  // Prevent watchdog timer issues
   }
 }
 
 const char* getServiceName(uint8_t service) {
-        if (service & sensor_msgs__msg__NavSatStatus__SERVICE_GPS)     return "GPS";
-        if (service & sensor_msgs__msg__NavSatStatus__SERVICE_GLONASS) return "GLONASS";
-        if (service & sensor_msgs__msg__NavSatStatus__SERVICE_GALILEO) return "GALILEO";
-        if (service & sensor_msgs__msg__NavSatStatus__SERVICE_COMPASS) return "BEIDOU";
-        return "UNKNOWN";
+  if (service & sensor_msgs__msg__NavSatStatus__SERVICE_GPS)     return "GPS";
+  if (service & sensor_msgs__msg__NavSatStatus__SERVICE_GLONASS) return "GLONASS";
+  if (service & sensor_msgs__msg__NavSatStatus__SERVICE_GALILEO) return "GALILEO";
+  if (service & sensor_msgs__msg__NavSatStatus__SERVICE_COMPASS) return "BEIDOU";
+  return "UNKNOWN";
 }
 
 void NavSatPublishTask(void* pvParameters) {
   while (true) {
-    //Only publish if the time is synchronized with the ROS2 agent
+    // Only publish if the time is synchronized with the ROS2 agent
     if (!time_synchronized) {
-      Serial.println("Esperando sincronización de tiempo para publicar...");
+      Serial.println("Time not synchronized, skipping publish...");
       vTaskDelay(pdMS_TO_TICKS(1000));
       continue;
     }
 
     // Attempt to dequeue data (500ms timeout)
     // This prevents CPU polling/busy-waiting if the GPS is idle
-    if (xQueueReceive(data_queue, &gps_coords, pdMS_TO_TICKS(500)) == pdTRUE) {
-      
+    if (xQueueReceive(data_queue, &gps_data, pdMS_TO_TICKS(500)) == pdTRUE) {
       // Synchronized timestamp
       portENTER_CRITICAL(&timeSyncMutex);
       int64_t synced_time_ns = ros_synced_time_ns;
@@ -262,43 +258,48 @@ void NavSatPublishTask(void* pvParameters) {
       uint64_t elapsed_micros = micros() - sync_micros;
       int64_t current_time_ns = synced_time_ns + (elapsed_micros * 1000);
 
-      //Filling the NavSatFix message
+      // Filling the NavSatFix message
       msg.header.stamp.sec = current_time_ns / 1000000000LL;
       msg.header.stamp.nanosec = current_time_ns % 1000000000LL;
       msg.header.frame_id.data = const_cast<char*>(ROS_FRAME_ID);
       msg.header.frame_id.size = strlen(ROS_FRAME_ID);
-      msg.latitude = gps_coords.lat;
-      msg.longitude = gps_coords.lon;
-      msg.altitude = gps_coords.alt;
-      msg.status.status = gps_coords.status;
 
-   
+      portENTER_CRITICAL(&gpsMutex);
+      msg.latitude = gps_data.lat;
+      msg.longitude = gps_data.lon;
+      msg.altitude = gps_data.alt;
+      msg.status.status = gps_data.status;
 
-      switch (gps_coords.service) {
+      switch (gps_data.service) {
         case 0:
           msg.status.service = sensor_msgs__msg__NavSatStatus__SERVICE_GPS;
-        break;
+          break;
         case 1:
           msg.status.service = sensor_msgs__msg__NavSatStatus__SERVICE_GLONASS;
-        break;
+          break;
         case 2:
           msg.status.service = sensor_msgs__msg__NavSatStatus__SERVICE_GALILEO;
-        break;
+          break;
+        case 3:
+          msg.status.service = sensor_msgs__msg__NavSatStatus__SERVICE_COMPASS;
+          break;
         default:
-          msg.status.service = sensor_msgs__msg__NavSatStatus__SERVICE_COMPASS; 
-        break;
+          msg.status.service = sensor_msgs__msg__NavSatStatus__SERVICE_COMPASS;
+          break;
       }
+      portEXIT_CRITICAL(&gpsMutex);
 
       // Indicate that covariance is unknown (standard if error is not calculated)
       msg.position_covariance_type = sensor_msgs__msg__NavSatFix__COVARIANCE_TYPE_UNKNOWN;
 
-      Serial.printf("Publishing NavSatFix: lat=%.4f, lon=%.4f, alt=%.1f, time=%ld.%09lu, service=%s\n", 
-              msg.latitude, 
-              msg.longitude, 
-              msg.altitude, 
-              msg.header.stamp.sec, 
-              msg.header.stamp.nanosec, 
-              getServiceName(msg.status.service)); 
+      // Serial.printf(
+      //   "Publishing NavSatFix: lat=%.4f, lon=%.4f, alt=%.1f, time=%ld.%09lu, service=%s\n",
+      //   msg.latitude,
+      //   msg.longitude,
+      //   msg.altitude,
+      //   msg.header.stamp.sec,
+      //   msg.header.stamp.nanosec,
+      //   getServiceName(msg.status.service));
 
       rcl_ret_t ret = rcl_publish(&navsat_publisher, &msg, NULL);
     }
@@ -306,7 +307,6 @@ void NavSatPublishTask(void* pvParameters) {
     vTaskDelay(pdMS_TO_TICKS(10)); 
   }
 }
-
 
 void sync_timer_callback(rcl_timer_t* timer, int64_t last_call_time){
   Serial.println("[TIMER] Sync timer callback called");
