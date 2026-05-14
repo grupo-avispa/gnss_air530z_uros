@@ -221,6 +221,12 @@ void SerialGNSSReadTask(void* pvParameters) {
           gps_data.lon = gps.location.lng();
           gps_data.alt = gps.altitude.isValid() ? gps.altitude.meters() : 0.0;
           gps_data.service = static_cast<u_int8_t>(gps.getCurrentSentenceSystem());
+
+          if (gps.location.isValid()) {
+            gps_data.status = sensor_msgs__msg__NavSatStatus__STATUS_FIX;
+          } else {
+            gps_data.status = sensor_msgs__msg__NavSatStatus__STATUS_NO_FIX;
+          }
           portEXIT_CRITICAL(&gpsMutex);
           xQueueOverwrite(data_queue, &gps_data);
       }
