@@ -33,13 +33,13 @@
 static constexpr uint32_t ROS_DOMAIN_ID = 0;
 
 /// ROS 2 Node name
-static char ROS_NODE_NAME[] = "navsat_node";
+static char ROS_NODE_NAME[] = "gps_node";
 
 /// ROS 2 topic name for NavSatFix messages
-static char ROS_TOPIC_NAME[] = "navsat";
+static char ROS_TOPIC_NAME[] = "gps/fix";
 
 /// Frame ID for NavSatFix messages
-static char ROS_FRAME_ID[] = "gps_frame";
+static char ROS_FRAME_ID[] = "gps_link";
 
 /** @} */
 
