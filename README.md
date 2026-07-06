@@ -1,6 +1,7 @@
 # gnss_air530z_uros
 ![ROS2](https://img.shields.io/badge/ros2-jazzy-blue?logo=ros&logoColor=white)
 ![License](https://img.shields.io/github/license/grupo-avispa/gnss_air530z_uros)
+[![Build](https://github.com/grupo-avispa/gnss_air530z_uros/actions/workflows/build.yml/badge.svg)](https://github.com/grupo-avispa/gnss_air530z_uros/actions/workflows/build.yml)
 
 
 ## Overview
@@ -84,6 +85,10 @@ Monitor serial output:
 ```bash
 platformio device monitor --baud 115200
 ```
+
+## Continuous Integration
+
+A [GitHub Actions workflow](.github/workflows/build.yml) builds the firmware with PlatformIO on every push and pull request to `main`, ensuring the project always compiles against the pinned micro-ROS/`jazzy` distro and library dependencies.
 
 ## Usage
 
